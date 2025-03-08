@@ -1,0 +1,36 @@
+# Virtual Environment
+venv/
+env/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*.class
+
+# Google API credentials
+credentials.json
+token.pickle
+
+# Environment variables
+.env
+.flaskenv
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Logs
+*.log
+
+# VS Code settings
+.vscode/
+
+# Database
+*.db
+*.sqlite3
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
