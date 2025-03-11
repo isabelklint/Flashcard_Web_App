@@ -952,7 +952,7 @@ class PresentationService:
             formula = formula.replace('\\n', '\n')
             
             # Strip dollar signs from formula if present
-            formula = formula.strip().strip(')
+            formula = formula.strip().strip('$')
             
             # Count number of text lines to determine height
             line_count = formula.count('\n') + 1
@@ -982,7 +982,7 @@ class PresentationService:
                     y_position = start_position - i * line_spacing
                     
                     # Render the LaTeX formula with improved font size
-                    plt.text(0.5, y_position, f'${line}, 
+                    plt.text(0.5, y_position, f'${line}$',
                             fontsize=fontsize,
                             ha='center',
                             va='center',
