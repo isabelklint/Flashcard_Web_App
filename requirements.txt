@@ -23,3 +23,8 @@ certifi==2023.5.7
 urllib3<2.0
 charset-normalizer==3.1.0
 idna==3.4
+matplotlib==3.7.2
+Pillow==10.0.1
+google-api-python-client==2.95.0
+google-auth-httplib2==0.1.0
+google-auth-oauthlib==1.0.0
