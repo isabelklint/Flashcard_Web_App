@@ -1,0 +1,70 @@
+<!-- web/templates/dashboard/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flashcard Web App - Dashboard</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo">Flashcard Web App</div>
+            <div class="nav-links">
+                {% if session.get('credentials') %}
+                    <a href="/auth/logout">Logout</a>
+                {% else %}
+                    <a href="/auth/login">Login with Google</a>
+                {% endif %}
+            </div>
+        </nav>
+    </header>
+
+    <main>
+        <section class="hero">
+            <h1>Create Google Slides Presentations</h1>
+            <p>Upload CSV files to generate professional presentations with math rendering support</p>
+            
+            {% if session.get('credentials') %}
+                <a href="#upload-form" class="btn primary">Create New Presentation</a>
+            {% else %}
+                <a href="/auth/login" class="btn primary">Login to Get Started</a>
+            {% endif %}
+        </section>
+
+        {% if session.get('credentials') %}
+            <section id="upload-form" class="card">
+                <h2>Create New Presentation</h2>
+                <form action="/api/presentations/" method="post" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="title">Presentation Title</label>
+                        <input type="text" id="title" name="title" placeholder="My Presentation" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="csv_file">Upload CSV File</label>
+                        <input type="file" id="csv_file" name="csv_file" accept=".csv" required>
+                    </div>
+                    
+                    <button type="submit" class="btn primary">Generate Presentation</button>
+                </form>
+            </section>
+            
+            <section id="presentations" class="card">
+                <h2>My Presentations</h2>
+                <div class="presentations-list">
+                    <!-- This would be populated with AJAX -->
+                    <p>Loading your presentations...</p>
+                </div>
+            </section>
+        {% endif %}
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Flashcard Web App</p>
+    </footer>
+
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

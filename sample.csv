@@ -1,0 +1,14 @@
+Type,Number,Content,Notes
+title,,"Calculus Flashcards: Limits and Continuity",
+transition,,What are the properties of limits?,"Introduce fundamental concepts of limits"
+question,1,"Consider the function f(x) = \frac{x^2 - 4}{x - 2}. Find \lim_{x \to 2} f(x).",
+answer,1,"When we calculate \lim_{x \to 2} \frac{x^2 - 4}{x - 2}, we first note that direct substitution gives \frac{0}{0}, which is indeterminate.\\n\\nWe can factor the numerator: \frac{x^2 - 4}{x - 2} = \frac{(x+2)(x-2)}{x-2} = x + 2 for x \neq 2\\n\\nSince the function simplifies to x + 2 for all values except x = 2, and limits only care about values close to 2 (not at 2), we have:\\n\\n\lim_{x \to 2} f(x) = \lim_{x \to 2} (x + 2) = 2 + 2 = 4",
+question,2,"State and explain the Squeeze Theorem for limits.",
+answer,2,"The Squeeze Theorem (also called the Sandwich Theorem or Pinching Theorem) states:\\n\\nIf g(x) ≤ f(x) ≤ h(x) for all x in some open interval containing a (except possibly at a itself), and\\n\\n\lim_{x \to a} g(x) = \lim_{x \to a} h(x) = L\\n\\nThen \lim_{x \to a} f(x) = L as well.\\n\\nIn other words, if a function is "squeezed" between two functions that both approach the same limit, then the middle function must approach that limit too.",
+question,3,"What are the properties of limits?",
+answer,3,"Key properties of limits include:\\n\\n- Sum Rule: \lim_{x \to a}[f(x) + g(x)] = \lim_{x \to a}f(x) + \lim_{x \to a}g(x)\\n\\n- Product Rule: \lim_{x \to a}[f(x) · g(x)] = \lim_{x \to a}f(x) · \lim_{x \to a}g(x)\\n\\n- Quotient Rule: \lim_{x \to a}\frac{f(x)}{g(x)} = \frac{\lim_{x \to a}f(x)}{\lim_{x \to a}g(x)} provided \lim_{x \to a}g(x) \neq 0\\n\\n- Power Rule: \lim_{x \to a}[f(x)]^n = [\lim_{x \to a}f(x)]^n for integer n\\n\\n- Root Rule: \lim_{x \to a}\sqrt[n]{f(x)} = \sqrt[n]{\lim_{x \to a}f(x)} for functions where the limit is positive (for even roots)",
+transition,,"Let's practice these concepts with another example",
+question,4,"Evaluate \lim_{x \to 0} \frac{\sin(x)}{x}",
+answer,4,"\lim_{x \to 0} \frac{\sin(x)}{x} = 1\\n\\nThis is a fundamental limit in calculus. While it's not obvious by direct substitution (which gives \frac{0}{0}), it can be proven through geometric arguments or using the squeeze theorem.\\n\\nThis limit is used extensively in calculus, particularly in proving the derivative of sine.",
+question,5,"What is the definition of continuity at a point?",
+answer,5,"A function f(x) is continuous at a point x = a if the following three conditions are met:\\n\\n1. f(a) is defined (the function exists at that point)\\n\\n2. \lim_{x \to a} f(x) exists (the limit exists as x approaches a)\\n\\n3. \lim_{x \to a} f(x) = f(a) (the limit equals the function value)\\n\\nIf any of these conditions fail, the function has a discontinuity at x = a."
