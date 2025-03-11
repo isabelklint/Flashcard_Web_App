@@ -13,9 +13,18 @@ from googleapiclient.errors import HttpError
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('presentation_service')
 
+# Import from our renderers
+from services.render_service import RenderService
+from renderers.math import MathRenderer
+from utils.latex_utils import contains_math_formula, render_latex_to_image, check_and_resize_image
+
 class PresentationService:
     def __init__(self):
-        # Define consistent styling for slides
+        # Initialize the render service
+        self.render_service = RenderService()
+        self.math_renderer = MathRenderer()
+        
+        # Color scheme and font sizes from calculus app
         self.COLORS = {
             'primary_blue': {'red': 0.0, 'green': 0.4, 'blue': 0.8},
             'dark_text': {'red': 0.2, 'green': 0.2, 'blue': 0.2},
@@ -23,10 +32,10 @@ class PresentationService:
         }
         
         self.FONT_SIZES = {
-            'title': 44,
-            'subtitle': 28,
-            'heading': 40,
-            'body': 36,
+            'title': 48,     # Increased from your web app
+            'subtitle': 32,
+            'heading': 44,   # Increased from your web app
+            'body': 38,      # Increased from your web app
             'notes': 24
         }
         
@@ -328,55 +337,130 @@ class PresentationService:
                 else:
                     question_text = ""
                 
-                # First add the text
-                requests.append({
-                    'insertText': {
-                        'objectId': body_placeholder_id,
-                        'text': question_text
-                    }
-                })
-                
-                # Check if body contains bullet points (lines starting with - or *)
-                if question_text and any(line.strip().startswith(('-', '*')) for line in question_text.split('\n')):
-                    # Convert bullet points
+                # Check if question contains math formula
+                if contains_math_formula(question_text):
+                    # Render the formula as an image
+                    try:
+                        # Get image data
+                        image_data = render_latex_to_image(question_text, fontsize=60, dpi=300)
+
+                        # Make sure to resize it before uploading
+                        image_data = check_and_resize_image(image_data, max_size_bytes=1048576)
+
+                        if image_data:
+                            # Upload image to Drive
+                            file_metadata = {
+                                'name': f'latex_question_{slide_id}.png',
+                                'mimeType': 'image/png'
+                            }
+                            
+                            media = MediaIoBaseUpload(image_data, mimetype='image/png')
+                            file = self._execute_with_backoff(drive_service.files().create(
+                                body=file_metadata,
+                                media_body=media,
+                                fields='id'
+                            ))
+                            
+                            image_file_id = file.get('id')
+                            
+                            # Make the file accessible to anyone with the link
+                            self._execute_with_backoff(drive_service.permissions().create(
+                                fileId=image_file_id,
+                                body={'type': 'anyone', 'role': 'reader'},
+                                fields='id'
+                            ))
+                            
+                            # Get the slide dimensions
+                            slide_width = 720  # Default Google Slides width
+                            slide_height = 405  # Default Google Slides height
+                            
+                            # Calculate image dimensions
+                            image_width = 680  # Almost full width
+                            image_height = 320  # Larger height for formula
+                            
+                            # Center the image on the slide
+                            x_position = (slide_width - image_width) / 2
+                            y_position = 200  # Position below title
+                            
+                            # Add image to slide request
+                            requests.append({
+                                'createImage': {
+                                    'url': f'https://drive.google.com/uc?id={image_file_id}',
+                                    'elementProperties': {
+                                        'pageObjectId': slide_id,
+                                        'size': {
+                                            'width': {'magnitude': image_width, 'unit': 'PT'},
+                                            'height': {'magnitude': image_height, 'unit': 'PT'}
+                                        },
+                                        'transform': {
+                                            'scaleX': 1,
+                                            'scaleY': 1,
+                                            'translateX': x_position,
+                                            'translateY': y_position,
+                                            'unit': 'PT'
+                                        }
+                                    }
+                                }
+                            })
+                    except Exception as e:
+                        logger.error(f"Error rendering question LaTeX: {e}")
+                        # Fall back to text if LaTeX rendering fails
+                        requests.append({
+                            'insertText': {
+                                'objectId': body_placeholder_id,
+                                'text': question_text
+                            }
+                        })
+                else:
+                    # First add the text
                     requests.append({
-                        'createParagraphBullets': {
+                        'insertText': {
                             'objectId': body_placeholder_id,
-                            'textRange': {
-                                'type': 'ALL'
-                            },
-                            'bulletPreset': 'BULLET_DISC_CIRCLE_SQUARE'
+                            'text': question_text
                         }
                     })
                     
-                # Then update text style
-                requests.append({
-                    'updateTextStyle': {
-                        'objectId': body_placeholder_id,
-                        'style': {
-                            'fontSize': {
-                                'magnitude': self.FONT_SIZES['body'],
-                                'unit': 'PT'
+                    # Check if body contains bullet points (lines starting with - or *)
+                    if question_text and any(line.strip().startswith(('-', '*')) for line in question_text.split('\n')):
+                        # Convert bullet points
+                        requests.append({
+                            'createParagraphBullets': {
+                                'objectId': body_placeholder_id,
+                                'textRange': {
+                                    'type': 'ALL'
+                                },
+                                'bulletPreset': 'BULLET_DISC_CIRCLE_SQUARE'
                             }
-                        },
-                        'fields': 'fontSize'
-                    }
-                })
-                
-                # Lastly, update paragraph styling
-                requests.append({
-                    'updateParagraphStyle': {
-                        'objectId': body_placeholder_id,
-                        'style': {
-                            'alignment': 'CENTER',
-                            'spaceAbove': {
-                                'magnitude': 20,  # Add 20pt space above the body text
-                                'unit': 'PT'
-                            }
-                        },
-                        'fields': 'alignment,spaceAbove'
-                    }
-                })
+                        })
+                        
+                    # Then update text style
+                    requests.append({
+                        'updateTextStyle': {
+                            'objectId': body_placeholder_id,
+                            'style': {
+                                'fontSize': {
+                                    'magnitude': self.FONT_SIZES['body'],
+                                    'unit': 'PT'
+                                }
+                            },
+                            'fields': 'fontSize'
+                        }
+                    })
+                    
+                    # Lastly, update paragraph styling
+                    requests.append({
+                        'updateParagraphStyle': {
+                            'objectId': body_placeholder_id,
+                            'style': {
+                                'alignment': 'CENTER',
+                                'spaceAbove': {
+                                    'magnitude': 20,  # Add 20pt space above the body text
+                                    'unit': 'PT'
+                                }
+                            },
+                            'fields': 'alignment,spaceAbove'
+                        }
+                    })
             
             if requests:
                 self._execute_with_backoff(service.presentations().batchUpdate(
@@ -476,11 +560,16 @@ class PresentationService:
             if answer_text is None:
                 answer_text = ""
                 
-            # Check if answer has math formulas
-            if answer_text and self._contains_math_formula(answer_text):
-                # If we have LaTeX, we'll try to render it as an image
+            # Check if answer has math formulas using the calculus app's detection
+            if contains_math_formula(answer_text):
+                # If we have LaTeX, we'll try to render it as an image using the calculus app's renderer
                 try:
-                    image_data = self._render_latex_to_image(answer_text)
+                    # Render LaTeX as image
+                    image_data = latex_utils.render_latex_to_image(answer_text, fontsize=60, dpi=300)
+                    
+                    # Make sure to resize it before uploading
+                    image_data = latex_utils.check_and_resize_image(image_data, max_size_bytes=1048576)
+                    
                     if image_data:
                         # Upload image to Drive
                         file_metadata = {
@@ -510,11 +599,11 @@ class PresentationService:
                         
                         # Calculate image dimensions
                         image_width = 680  # Almost full width
-                        image_height = 300  # Reasonable height for formula
+                        image_height = 320  # Larger height for formula
                         
                         # Center the image on the slide
                         x_position = (slide_width - image_width) / 2
-                        y_position = 200  # Position below title
+                        y_position = 180  # Position below title
                         
                         # Add image to slide request
                         requests.append({
@@ -864,50 +953,117 @@ class PresentationService:
             
             # Insert body text if we found the body placeholder and body is provided
             if body_placeholder_id and body:
-                text_requests.append({
-                    'insertText': {
-                        'objectId': body_placeholder_id,
-                        'text': body
-                    }
-                })
-                
-                # Style the body text
-                text_requests.append({
-                    'updateTextStyle': {
-                        'objectId': body_placeholder_id,
-                        'style': {
-                            'fontSize': {
-                                'magnitude': self.FONT_SIZES['body'],
-                                'unit': 'PT'
+                # Check if body contains math formulas
+                if contains_math_formula(body):
+                    # Try to render the formula as an image
+                    try:
+                        image_data = latex_utils.render_latex_to_image(body, fontsize=60, dpi=300)
+                        image_data = latex_utils.check_and_resize_image(image_data)
+                        
+                        # Upload the image to Google Drive
+                        file_metadata = {
+                            'name': f'latex_basic_{slide_id}.png',
+                            'mimeType': 'image/png'
+                        }
+                        
+                        media = MediaIoBaseUpload(image_data, mimetype='image/png')
+                        file = self._execute_with_backoff(service.files().create(
+                            body=file_metadata,
+                            media_body=media,
+                            fields='id'
+                        ))
+                        
+                        image_file_id = file.get('id')
+                        
+                        # Make file accessible with link
+                        self._execute_with_backoff(service.permissions().create(
+                            fileId=image_file_id,
+                            body={'type': 'anyone', 'role': 'reader'},
+                            fields='id'
+                        ))
+                        
+                        # Center the image on slide
+                        slide_width = 720
+                        slide_height = 405
+                        image_width = 680
+                        image_height = 320
+                        x_position = (slide_width - image_width) / 2
+                        y_position = 200
+                        
+                        # Add image to slide
+                        text_requests.append({
+                            'createImage': {
+                                'url': f'https://drive.google.com/uc?id={image_file_id}',
+                                'elementProperties': {
+                                    'pageObjectId': slide_id,
+                                    'size': {
+                                        'width': {'magnitude': image_width, 'unit': 'PT'},
+                                        'height': {'magnitude': image_height, 'unit': 'PT'}
+                                    },
+                                    'transform': {
+                                        'scaleX': 1,
+                                        'scaleY': 1,
+                                        'translateX': x_position,
+                                        'translateY': y_position,
+                                        'unit': 'PT'
+                                    }
+                                }
                             }
-                        },
-                        'fields': 'fontSize'
-                    }
-                })
-                
-                # Check if body contains bullet points (lines starting with - or *)
-                if any(line.strip().startswith(('-', '*')) for line in body.split('\n')):
-                    # Convert bullet points
+                        })
+                    except Exception as e:
+                        logger.error(f"Error rendering math in basic slide: {e}")
+                        # Fall back to text
+                        text_requests.append({
+                            'insertText': {
+                                'objectId': body_placeholder_id,
+                                'text': body
+                            }
+                        })
+                else:
                     text_requests.append({
-                        'createParagraphBullets': {
+                        'insertText': {
                             'objectId': body_placeholder_id,
-                            'textRange': {
-                                'type': 'ALL'
-                            },
-                            'bulletPreset': 'BULLET_DISC_CIRCLE_SQUARE'
+                            'text': body
                         }
                     })
-                else:
-                    # Center align if not bullets
+                    
+                    # Style the body text
                     text_requests.append({
-                        'updateParagraphStyle': {
+                        'updateTextStyle': {
                             'objectId': body_placeholder_id,
                             'style': {
-                                'alignment': 'CENTER'
+                                'fontSize': {
+                                    'magnitude': self.FONT_SIZES['body'],
+                                    'unit': 'PT'
+                                }
                             },
-                            'fields': 'alignment'
+                            'fields': 'fontSize'
                         }
                     })
+                    
+                    # Check if body contains bullet points (lines starting with - or *)
+                    if any(line.strip().startswith(('-', '*')) for line in body.split('\n')):
+                        # Convert bullet points
+                        text_requests.append({
+                            'createParagraphBullets': {
+                                'objectId': body_placeholder_id,
+                                'textRange': {
+                                    'type': 'ALL'
+                                },
+                                'bulletPreset': 'BULLET_DISC_CIRCLE_SQUARE'
+                            }
+                        })
+                    else:
+                        # Center align if not bullets
+                        text_requests.append({
+                            'updateParagraphStyle': {
+                                'objectId': body_placeholder_id,
+                                'style': {
+                                    'alignment': 'CENTER'
+                                },
+                                'fields': 'alignment'
+                            }
+                        })
             
             # Execute the text insertion requests if any
             if text_requests:
@@ -920,144 +1076,3 @@ class PresentationService:
         except Exception as e:
             logger.error(f"Error creating basic slide: {str(e)}")
             raise
-    
-    def _contains_math_formula(self, text):
-        """Checks if text contains mathematical notation."""
-        patterns = [
-            r'\\frac', r'\\sqrt', r'\\sum', r'\\int', r'\\lim', r'\\to', r'\\cdot',
-            r'\^', r'/', r'\*', r'sin|cos|tan', r'\\neq', r'eq0',
-            r'\b\d+/\d+\b', r'[∫∑∏∞√]'
-        ]
-        return any(re.search(pattern, text) for pattern in patterns)
-    
-    def _render_latex_to_image(self, formula, fontsize=60, dpi=300, format='png'):
-        """Renders LaTeX formula to an image with improved clarity and formatting."""
-        try:
-            # Import required libraries here to avoid dependencies unless needed
-            import matplotlib
-            import matplotlib.pyplot as plt
-            from PIL import Image
-            
-            # Configure matplotlib for math rendering
-            matplotlib.rcParams['text.usetex'] = False  # Use built-in mathtext renderer
-            matplotlib.rcParams['mathtext.fontset'] = 'cm'  # Computer Modern font
-            matplotlib.rcParams['mathtext.default'] = 'regular'  # Default font style
-            
-            # Special case handling for common math notation
-            formula = formula.replace("eq0", "≠ 0")
-            formula = formula.replace("\\neq 0", "≠ 0")
-            formula = formula.replace("\\neq0", "≠ 0")
-            
-            # Process any literal \n characters to actual line breaks
-            formula = formula.replace('\\n', '\n')
-            
-            # Strip dollar signs from formula if present
-            formula = formula.strip().strip('$')
-            
-            # Count number of text lines to determine height
-            line_count = formula.count('\n') + 1
-            
-            # Adjust figure dimensions based on content length
-            width = 16  # Wider figure for better readability
-            height = max(8, line_count * 0.8 + 2)  # Scale height based on line count
-            
-            # Close any existing figures to prevent caching issues
-            plt.close('all')
-            
-            # Create a figure with proper dimensions
-            fig = plt.figure(figsize=(width, height), dpi=dpi)
-            
-            # Split the formula by line breaks
-            lines = formula.split('\n')
-            
-            # Calculate appropriate spacing between lines
-            line_spacing = 0.8 / max(len(lines), 1)
-            start_position = 0.5 + (len(lines) - 1) * line_spacing / 2
-            
-            # Render each line separately with proper spacing
-            for i, line in enumerate(lines):
-                line = line.strip()
-                if line:  # Skip empty lines
-                    # Calculate vertical position for each line
-                    y_position = start_position - i * line_spacing
-                    
-                    # Render the LaTeX formula with improved font size
-                    plt.text(0.5, y_position, f'${line}$',
-                            fontsize=fontsize,
-                            ha='center',
-                            va='center',
-                            transform=fig.transFigure)
-            
-            plt.axis('off')  # Hide axes
-            
-            # Use tight layout with more padding
-            plt.tight_layout(pad=1.0)
-            
-            # Save to buffer with high DPI for clarity
-            buf = io.BytesIO()
-            fig.savefig(buf, format=format, dpi=dpi, bbox_inches='tight', pad_inches=0.2, transparent=True)
-            plt.close(fig)
-            buf.seek(0)
-            
-            return buf
-        except Exception as e:
-            logger.error(f"Error rendering LaTeX: {str(e)}")
-            # Create a fallback image with error message
-            fig = plt.figure(figsize=(10, 5))
-            plt.text(0.5, 0.5, f"Could not render formula", fontsize=14,
-                    ha='center', va='center', transform=fig.transFigure)
-            plt.axis('off')
-            
-            buf = io.BytesIO()
-            fig.savefig(buf, format='png', dpi=dpi)
-            plt.close(fig)
-            buf.seek(0)
-            
-            return buf
-    
-    def _check_and_resize_image(self, image_data, max_size_bytes=2097152, max_width=1500, max_height=1000):
-        """Resizes image if it exceeds size limit or dimensions."""
-        try:
-            from PIL import Image
-            
-            image_data.seek(0)
-            img = Image.open(image_data)
-            
-            # Check dimensions first
-            width, height = img.size
-            if width > max_width or height > max_height:
-                # Calculate scale factor to fit within max dimensions
-                scale_w = max_width / width if width > max_width else 1
-                scale_h = max_height / height if height > max_height else 1
-                scale = min(scale_w, scale_h)
-                
-                new_width = int(width * scale)
-                new_height = int(height * scale)
-                
-                img = img.resize((new_width, new_height), Image.LANCZOS)
-            
-            # Now check file size
-            temp_buffer = io.BytesIO()
-            img.save(temp_buffer, format='PNG')
-            current_size = temp_buffer.getvalue().__sizeof__()
-            
-            if current_size <= max_size_bytes:
-                # If already under size limit, return the resized image
-                temp_buffer.seek(0)
-                return temp_buffer
-            
-            # Need to further reduce size
-            compression_quality = 95
-            while compression_quality > 50 and current_size > max_size_bytes:
-                temp_buffer = io.BytesIO()
-                img.save(temp_buffer, format='PNG', optimize=True, quality=compression_quality)
-                current_size = temp_buffer.getvalue().__sizeof__()
-                compression_quality -= 5
-            
-            temp_buffer.seek(0)
-            return temp_buffer
-        except Exception as e:
-            logger.error(f"Error resizing image: {e}")
-            # Return original if resizing fails
-            image_data.seek(0)
-            return image_data

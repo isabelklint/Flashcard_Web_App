@@ -1,4 +1,6 @@
 # app.py - Updated version
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
 from flask import Flask, render_template, session
 from api.routes.presentations import presentations_bp
 from api.routes.auth import auth_bp
@@ -56,4 +58,4 @@ def documentation():
     return render_template('dashboard/documentation.html')
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5001, host='localhost')
+    app.run(debug=True, port=5001, host='localhost', threaded=False)
